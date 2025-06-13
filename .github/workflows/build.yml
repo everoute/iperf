@@ -1,0 +1,43 @@
+name: build
+on: [push]
+
+env:
+  version: 3.19
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        builder: 
+        - [self-hosted, openeuler]
+        - [self-hosted, openeuler-arm]
+        - [self-hosted, tencentos]
+        - [self-hosted, tencentos-arm]
+        - [self-hosted, centos]
+    
+    runs-on: ${{ matrix.builder }}
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 1
+
+    - name: build
+      run: |
+        sed -i 's/3.19+/${{ env.version }}/g' configure.ac &&
+        ./bootstrap.sh && ./configure
+
+    - run: |
+        git config --global user.email "smartx@smartx.com" &&
+        git config --global user.name "smartx" &&
+        ./make_release tag ${{ env.version }} && ./make_release tar ${{ env.version }}
+
+    - run: mkdir SOURCES && mv *iperf*tar.gz SOURCES/
+
+    - run: |
+        sed -i "1i\%define debug_package %{nil}" iperf3.spec &&
+        rpmbuild --nocheck --define "_topdir $(pwd)" -ba iperf3.spec
+
+    - uses: actions/upload-artifact@v4
+      with:
+        path: ${{ github.workspace }}/RPMS/*/*
+        name: rpms-${{ runner.arch }}-${{ runner.name }}
